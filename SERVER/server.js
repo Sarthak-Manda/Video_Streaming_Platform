@@ -186,5 +186,137 @@ const verifyToken = (req, res, next) => {
     // If token is invalid or expired
     res.status(401).json({ message: 'Invalid token' });
   }
-};  
+};
+
+app.post('/api/auth/register', async (req, res) => {
+
+  try {
+
+    const { username, email , password } = req.body;
+
+
+    if(!username || !email || !password) {
+
+      return res.status(400).json({ message: 'All fields required'})
+
+
+    }
+
+    const existingUser = await userSchema.findOne({$or: [{username}, {email}]});
+
+    if(existingUser) {
+
+      return res.status(400).json({message: 'Username or path.extnameail already exists'})
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const user = new User({
+
+
+    username,
+    email,
+    password: hashedPassword,
+
+  })
+
+  await user.save();
+
+  const token = jwt.signjwt.sign({id: user._id}, JWT_SECRET , {expiresIn: '7d'})
+    res.status(201).json ({
+
+      message: 'User created succcessfully',
+      token,
+      user: {id:user._id, username: user.username, email: user.email },
+    })
+} catch(err){
+
+  res.status(500).json({ message: 'Server error', error: err.message})
+
+}
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password required' });
+    }
+
+    // Check if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid credentials' });
+    }
+
+    // Generate JWT
+    const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      message: 'Login successful',
+      token,
+      user: { 
+        id: user._id, 
+        username: user.username, 
+        email: user.email 
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+app.get('/api/auth/me', verifyToken, async (req, res) => {
+  try {
+    // Find user by ID attached to request by verifyToken middleware
+    // Exclude password field from the result for security
+    const user = await User.findById(req.userId).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+app.post('/api/videos/upload', verifyToken, upload.single('video'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    const { title, description, category } = req.body;
+
+    const video = new Video({
+      title: title || 'Untitled Video',
+      description: description || '',
+      category: category || 'General',
+      uploadedBy: req.userId,
+      fileUrl: `/uploads/${req.file.filename}`
+    });
+
+    await video.save();
+
+    // Populate user details to return a complete video object
+    await video.populate('uploadedBy', 'username avatar');
+
+    res.status(201).json({
+      message: 'Video uploaded successfully',
+      video,
+    });
+    
+  } catch (err) {
+    res.status(500).json({ message: 'Upload failed', error: err.message });
+  }
+});
     
