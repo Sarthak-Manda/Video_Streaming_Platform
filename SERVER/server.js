@@ -86,7 +86,7 @@ const videoSchema = new mongoose.Schema({
 
 });
 
-const video = mongoose.model('Video', videoSchema);
+const Video = mongoose.model('Video', videoSchema);
 
 // ==================== MULTER CONFIGURATION ====================
 // Multer settings for handling file uploads
@@ -320,3 +320,61 @@ app.post('/api/videos/upload', verifyToken, upload.single('video'), async (req, 
   }
 });
     
+//get all videos
+app.get('/api/videos', async (req, res) => {
+
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const  limit  = 12;
+
+    const skip = (page - 1) * limit;
+
+    const videos = await Video.find({ isPublic: true})
+
+    .populate('uploadedBy', 'username avatar')
+
+    .sort({createdAt: -1})
+
+    .skip(skip)
+
+    .limit(limit);
+
+    const total = await Video.countDocuments({isPublic: true})
+
+    res.json({
+      videos,
+
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total/limit)
+      },
+    });
+  } catch (err){
+    res.status(500).json({message: 'Serve error'})
+  }
+})
+
+//get single video
+app.get('/api/videos/:id', async(req,res) => {
+
+  try{
+    const video = await Video.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { views: 1} },
+
+
+      { new: true }
+    )
+    .populate('uploadedBy', 'username avatar subscribers bio')
+
+    if(!video){
+      return res.status(404).json({message: "video not found"})
+    }
+
+    res.json(video)
+  } catch ( err ){
+    res.status(500).json({message: 'Server error'})
+  }
+})
