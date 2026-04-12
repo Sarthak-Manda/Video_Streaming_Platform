@@ -288,7 +288,7 @@ app.get('/api/auth/me', verifyToken, async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
-
+// upload video
 app.post('/api/videos/upload', verifyToken, upload.single('video'), async (req, res) => {
   try {
     if (!req.file) {
@@ -377,4 +377,109 @@ app.get('/api/videos/:id', async(req,res) => {
   } catch ( err ){
     res.status(500).json({message: 'Server error'})
   }
+})
+
+//Like and Unlike 
+app.post('/api/video/:id/like', verifyToken, async (req, res) => {
+
+  try{
+
+    const video = await Video.findById(req.params.id);
+    if(!video){
+      return res.status(404).json({message: 'Video not found'})
+    }
+
+    const hasLiked = video.likedBy.includes(req.userId);
+
+    if(hasLiked){
+
+      video.likedBy.pull(req.userId);
+
+      video.likes -= 1;
+    } else {
+      video.likedBy.push(req.userId)
+
+      video.likes += 1;
+    }
+
+    await video.save();
+
+    res.json({likes: video.likes, likedBy: video.likedBy})
+
+  } catch (err) {
+    res.status(500).json({message: 'Server error'})
+  }
+})
+
+//add comment
+app.post('/api/videos/:id/comment', verifyToken,async (req,res)=> {
+  try{
+    const { text } = req.body;
+
+    if(!text){
+      return res.status(400).json({message: 'Comment not found'})
+    }
+
+    const user = await User.findById(req.userId)
+
+    const video = await Video.findById(req.params.id)
+
+    if(!video){
+      return res.status(404).json({message: 'Video not found'})
+    }
+
+    video.comments.push({
+      userId: req.userId,
+      username: user.username,
+      text,
+    })
+
+    await video.save();
+    res.status(201).json({message: 'Comment added ' , comments: video.comments})
+
+  }catch (err){
+    res.status(500).json({message: 'Server error'})
+  }
+
+})
+
+//get user videos
+app.get('/api/users/:userId/videos', async (req,res) => {
+
+  try{
+    const videos = await Video.find({
+
+      uploadedby: req.params.userId,
+      isPublic: true
+    })
+    .populate('uploadedBy','username avatar')
+    .sor({createdAt: -1})
+
+    res.json(videos)
+  }catch(err){
+    res.status(500).json({message: 'Server seeror'})
+  }
+})
+
+//get user profile
+app.get('/api/users//:userId', async (req,res) => {
+
+  try{
+    const user = await User.findById(req.params.userId).select('-passowrd')
+    if(!user){
+      return res.status(404).json({message: 'User not found'})
+    }
+
+    res.json(user);
+  }catch(err){
+    res.status(500).json({message: 'Server error'})
+  }
+})
+
+//server start
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+
+  console.log(`Server running on http://localhost:${PORT}`)
 })
